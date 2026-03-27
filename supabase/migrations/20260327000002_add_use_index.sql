@@ -1,0 +1,1 @@
+ALTER TABLE mail_jobs ADD COLUMN use_index BOOLEAN NOT NULL DEFAULT false;

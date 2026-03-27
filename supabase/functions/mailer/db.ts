@@ -12,6 +12,7 @@ export interface MailJob {
   is_active: boolean
   last_sent_at: string | null
   send_count: number
+  use_index: boolean
   created_at: string
 }
 

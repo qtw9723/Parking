@@ -32,8 +32,9 @@ Deno.serve(async (req) => {
       const jobs = await getDueJobs()
       const results = await Promise.allSettled(
         jobs.map(async (job) => {
+          const subject = job.use_index ? `[${job.send_count + 1}] ${job.subject}` : job.subject
           for (const recipient of job.recipients) {
-            await sendMail({ sender: job.sender, to: recipient, subject: job.subject, body: job.body })
+            await sendMail({ sender: job.sender, to: recipient, subject, body: job.body })
           }
           await markSent(job.id, job.send_count)
         })
