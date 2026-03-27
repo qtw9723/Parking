@@ -18,11 +18,14 @@ export async function sendMail(opts: SendOptions): Promise<void> {
     : Deno.env.get("MS_APP_PASSWORD")!
   const hostname = isGmail ? "smtp.gmail.com" : "smtp.office365.com"
 
+  const port = isGmail ? 465 : 587
+  const tls = isGmail ? true : false
+
   const client = new SMTPClient({
     connection: {
       hostname,
-      port: 587,
-      tls: false,
+      port,
+      tls,
       auth: { username: user, password },
     },
   })
