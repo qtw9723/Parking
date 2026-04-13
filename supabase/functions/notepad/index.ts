@@ -4,6 +4,7 @@ import {
   createNote,
   updateNote,
   deleteNote,
+  getProjects,
   saveVersion,
   getVersions,
   runDailyBackup,
@@ -50,6 +51,13 @@ Deno.serve(async (req) => {
     // GET /notepad or GET /notepad?id={id}
     if (method === "GET") {
       const action = url.searchParams.get("action")
+      const type = url.searchParams.get("type")
+
+      // GET ?type=projects
+      if (type === "projects") {
+        const projects = await getProjects()
+        return json(projects)
+      }
 
       // GET ?action=versions&noteId=xxx
       if (action === "versions") {

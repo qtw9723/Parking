@@ -12,10 +12,21 @@ export async function getNotes() {
   const supabase = getClient()
   const { data, error } = await supabase
     .from("notes")
-    .select("id, title, content_type, tags, created_at, updated_at")
+    .select("id, title, content_type, tags, user_id, created_at, updated_at")
     .order("updated_at", { ascending: false })
   if (error) throw error
   return data
+}
+
+// 프로젝트 목록 조회
+export async function getProjects() {
+  const supabase = getClient()
+  const { data, error } = await supabase
+    .from("projects")
+    .select("id, name, slug, user_id, is_master")
+    .order("created_at", { ascending: true })
+  if (error) throw error
+  return data ?? []
 }
 
 // 단일 노트 조회 (content 포함)
