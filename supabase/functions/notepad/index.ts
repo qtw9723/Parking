@@ -4,7 +4,12 @@ import {
   createNote,
   updateNote,
   deleteNote,
+  saveVersion,
+  getVersions,
+  runDailyBackup,
+  restoreVersion,
 } from "./data.ts"
+import { createClient } from "jsr:@supabase/supabase-js@2"
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -17,6 +22,18 @@ function json(data: unknown, status = 200) {
     status,
     headers: { "Content-Type": "application/json", ...corsHeaders },
   })
+}
+
+async function getUserFromRequest(req: Request) {
+  const authHeader = req.headers.get("Authorization")
+  if (!authHeader?.startsWith("Bearer ")) return null
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_ANON_KEY")!,
+    { global: { headers: { Authorization: authHeader } } },
+  )
+  const { data: { user } } = await supabase.auth.getUser()
+  return user
 }
 
 Deno.serve(async (req) => {
@@ -32,6 +49,16 @@ Deno.serve(async (req) => {
 
     // GET /notepad or GET /notepad?id={id}
     if (method === "GET") {
+      const action = url.searchParams.get("action")
+
+      // GET ?action=versions&noteId=xxx
+      if (action === "versions") {
+        const noteId = url.searchParams.get("noteId")
+        if (!noteId) return json({ error: "noteId required" }, 400)
+        const versions = await getVersions(noteId)
+        return json(versions)
+      }
+
       if (id) {
         const note = await getNoteById(id)
         if (!note) return json({ error: "note not found", id }, 404)
@@ -41,9 +68,47 @@ Deno.serve(async (req) => {
       return json(notes)
     }
 
-    // POST /notepad — 노트 생성
+    // POST /notepad
     if (method === "POST") {
       const body = await req.json()
+
+      // action: backup — pg_cron이 service_role key로 호출
+      if (body.action === "backup") {
+        const authHeader = req.headers.get("Authorization") ?? ""
+        const token = authHeader.replace("Bearer ", "")
+        if (token !== Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")) {
+          return json({ error: "unauthorized" }, 401)
+        }
+        await runDailyBackup()
+        return json({ success: true })
+      }
+
+      // action: snapshot — 클라이언트 shrinkage 감지 시 호출
+      if (body.action === "snapshot") {
+        const user = await getUserFromRequest(req)
+        if (!user) return json({ error: "unauthorized" }, 401)
+        if (!body.noteId) return json({ error: "noteId required" }, 400)
+        const version = await saveVersion(body.noteId, {
+          title: body.title ?? "",
+          content: body.content ?? "",
+          content_type: body.content_type ?? "markdown",
+          tags: body.tags ?? [],
+        }, "shrinkage")
+        return json(version)
+      }
+
+      // action: restore — 특정 버전으로 복구
+      if (body.action === "restore") {
+        const user = await getUserFromRequest(req)
+        if (!user) return json({ error: "unauthorized" }, 401)
+        if (!body.noteId || !body.versionId) {
+          return json({ error: "noteId and versionId required" }, 400)
+        }
+        const note = await restoreVersion(body.noteId, body.versionId)
+        return json(note)
+      }
+
+      // 기본: 노트 생성
       const note = await createNote(body)
       return json(note, 201)
     }
