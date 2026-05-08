@@ -69,6 +69,7 @@ export async function createItem(body: {
   note_ids?: string[]
   tags?: string[]
   end_time?: string | null
+  end_date?: string | null
 }) {
   const supabase = getClient()
   const { data: existing } = await supabase
