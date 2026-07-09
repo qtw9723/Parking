@@ -19,7 +19,7 @@ function verifyAdminToken(req: Request): boolean {
 }
 
 async function callGeminiAPI(jsonData: unknown, apiKey: string): Promise<unknown> {
-  const prompt = `분석해줄 Cogi Dialog JSON 구조:
+  const prompt = `분석해줄 CogInsight Dialog JSON 구조:
 ${JSON.stringify(jsonData, null, 2)}
 
 이 JSON의 구조를 분석하고, 사용자의 답변(봇 이름, 인사말, 기능 설명 등)을 기반으로 어떻게 이 JSON을 변환해야 하는지 규칙을 정의해줘.
@@ -75,7 +75,7 @@ serve(async (req) => {
     const referenceId = url.pathname.split("/").slice(-2)[0]
 
     const { data: reference, error: fetchError } = await supabase
-      .from("cogi_references")
+      .from("coginsight_references")
       .select("*")
       .eq("id", referenceId)
       .single()
@@ -90,7 +90,7 @@ serve(async (req) => {
     const template = await callGeminiAPI(reference.json_data, geminiKey)
 
     const { error: updateError } = await supabase
-      .from("cogi_references")
+      .from("coginsight_references")
       .update({
         generation_template: template,
         template_status: "completed"

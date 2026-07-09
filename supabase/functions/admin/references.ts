@@ -36,7 +36,7 @@ serve(async (req) => {
 
     if (req.method === "GET") {
       const { data, error } = await supabase
-        .from("cogi_references")
+        .from("coginsight_references")
         .select("*")
         .order("created_at", { ascending: false })
 
@@ -49,7 +49,7 @@ serve(async (req) => {
     if (req.method === "POST") {
       const body = await req.json()
       const { data, error } = await supabase
-        .from("cogi_references")
+        .from("coginsight_references")
         .insert([{
           name: body.name,
           json_data: body.json_data,
@@ -66,7 +66,7 @@ serve(async (req) => {
 
     if (req.method === "DELETE" && id) {
       const { error } = await supabase
-        .from("cogi_references")
+        .from("coginsight_references")
         .delete()
         .eq("id", id)
 

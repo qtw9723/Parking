@@ -35,7 +35,7 @@ serve(async (req) => {
     const { responses, reference_id } = await req.json()
 
     const { data: reference, error: refError } = await supabase
-      .from("cogi_references")
+      .from("coginsight_references")
       .select("*")
       .eq("id", reference_id)
       .single()
@@ -58,7 +58,7 @@ serve(async (req) => {
     }
 
     const { data: result, error: saveError } = await supabase
-      .from("cogi_results")
+      .from("coginsight_results")
       .insert([{
         responses,
         generated_json: generatedJson,

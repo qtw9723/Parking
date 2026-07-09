@@ -33,7 +33,7 @@ serve(async (req) => {
     if (req.method === "GET") {
       if (id && id !== "results") {
         const { data, error } = await supabase
-          .from("cogi_results")
+          .from("coginsight_results")
           .select("*")
           .eq("id", id)
           .single()
@@ -44,7 +44,7 @@ serve(async (req) => {
         })
       } else {
         const { data, error } = await supabase
-          .from("cogi_results")
+          .from("coginsight_results")
           .select("*")
           .order("created_at", { ascending: false })
 
@@ -61,7 +61,7 @@ serve(async (req) => {
       }
 
       const { error } = await supabase
-        .from("cogi_results")
+        .from("coginsight_results")
         .delete()
         .eq("id", id)
 
