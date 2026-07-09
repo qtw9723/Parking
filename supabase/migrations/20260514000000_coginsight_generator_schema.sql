@@ -1,4 +1,4 @@
--- Cogi POC Generator schema
+-- CogInsight POC Generator schema
 
 -- questions table
 CREATE TABLE IF NOT EXISTS questions (
@@ -12,8 +12,8 @@ CREATE TABLE IF NOT EXISTS questions (
   updated_at TIMESTAMP DEFAULT now()
 );
 
--- cogi_references table (stores reference JSON templates)
-CREATE TABLE IF NOT EXISTS cogi_references (
+-- coginsight_references table (stores reference JSON templates)
+CREATE TABLE IF NOT EXISTS coginsight_references (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
   json_data JSONB NOT NULL,
@@ -23,16 +23,16 @@ CREATE TABLE IF NOT EXISTS cogi_references (
   updated_at TIMESTAMP DEFAULT now()
 );
 
--- cogi_results table (stores generated JSON results)
-CREATE TABLE IF NOT EXISTS cogi_results (
+-- coginsight_results table (stores generated JSON results)
+CREATE TABLE IF NOT EXISTS coginsight_results (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   responses JSONB NOT NULL,
   generated_json JSONB NOT NULL,
-  reference_id UUID REFERENCES cogi_references(id) ON DELETE SET NULL,
+  reference_id UUID REFERENCES coginsight_references(id) ON DELETE SET NULL,
   created_at TIMESTAMP DEFAULT now()
 );
 
 -- Create indices for common queries
-CREATE INDEX IF NOT EXISTS idx_cogi_questions_order ON questions(order_index);
-CREATE INDEX IF NOT EXISTS idx_cogi_references_status ON cogi_references(template_status);
-CREATE INDEX IF NOT EXISTS idx_cogi_results_created ON cogi_results(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_coginsight_questions_order ON questions(order_index);
+CREATE INDEX IF NOT EXISTS idx_coginsight_references_status ON coginsight_references(template_status);
+CREATE INDEX IF NOT EXISTS idx_coginsight_results_created ON coginsight_results(created_at DESC);
