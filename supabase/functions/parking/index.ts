@@ -3,6 +3,7 @@ import {
   getParkingById,
   getAllParking,
   updateParkingDetails,
+  reloadParking,
 } from "./data.ts"
 
 Deno.serve(async (req) => {
@@ -13,6 +14,21 @@ Deno.serve(async (req) => {
     const method = req.method
 
     console.log(`Method: ${method}, Path: ${pathname}`); // 로그로 경로 확인용
+
+    // 🆕 최소 주차면수 기준 재적재 (기존 데이터 전량 교체)
+    //    예: POST /reload?min=50  ,  POST /reload?min=50&limit=100
+    if (method === "POST" && pathname.includes("/reload")) {
+      const minParam = Number(url.searchParams.get("min"))
+      const limitParam = Number(url.searchParams.get("limit"))
+      const min = Number.isFinite(minParam) && minParam > 0 ? minParam : 50
+      const limit = Number.isFinite(limitParam) && limitParam > 0 ? limitParam : 0
+
+      const result = await reloadParking(min, limit)
+      return new Response(JSON.stringify(result), {
+        status: result.success ? 200 : 400,
+        headers: { "Content-Type": "application/json" }
+      })
+    }
 
     // 2️⃣ 데이터 추가 적재 (이름, 주소 등)
     if (method === "POST" && pathname.includes("/initInfo")) {
