@@ -7,6 +7,14 @@ const DATA_GO_KR_KEY = Deno.env.get("PUBLIC_DATA_SERVICE_KEY") ?? ""
 const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY)
 
 /**
+ * 조회 범위 상수
+ * - 실시간 API는 5,000건이면 교집합 대상이 모두 포함됩니다 (실측 인덱스 2779~4804, 약 0.6초)
+ * - 상세 API는 50,000건에 약 25초 소요되며, 그 이상 늘려도 교집합 건수가 거의 늘지 않습니다
+ */
+const REALTIME_LOOKUP_ROWS = 5000
+const STTUS_LOOKUP_ROWS = 50000
+
+/**
  * ID 가공 함수
  */
 function getLogicalId(id: any): string {
@@ -16,8 +24,8 @@ function getLogicalId(id: any): string {
 /**
  * 실시간 정보 API 호출 (PrkRealtimeInfo)
  */
-async function fetchRealtime() {
-  const url = `http://apis.data.go.kr/B553881/Parking/PrkRealtimeInfo?serviceKey=${DATA_GO_KR_KEY}&pageNo=1&numOfRows=100&format=2`
+async function fetchRealtime(numOfRows = 100, pageNo = 1) {
+  const url = `http://apis.data.go.kr/B553881/Parking/PrkRealtimeInfo?serviceKey=${DATA_GO_KR_KEY}&pageNo=${pageNo}&numOfRows=${numOfRows}&format=2`
   try {
     const res = await fetch(url)
     const json = await res.json()
@@ -31,8 +39,8 @@ async function fetchRealtime() {
 /**
  * 상세 정보 API 호출 (PrkSttusInfo)
  */
-async function fetchSttusInfo() {
-  const url = `http://apis.data.go.kr/B553881/Parking/PrkSttusInfo?serviceKey=${DATA_GO_KR_KEY}&pageNo=1&numOfRows=100&format=2`
+async function fetchSttusInfo(numOfRows = 100, pageNo = 1) {
+  const url = `http://apis.data.go.kr/B553881/Parking/PrkSttusInfo?serviceKey=${DATA_GO_KR_KEY}&pageNo=${pageNo}&numOfRows=${numOfRows}&format=2`
   try {
     const res = await fetch(url)
     const json = await res.json()
@@ -120,13 +128,90 @@ export async function updateParkingDetails() {
   };
 }
 /**
+ * 🆕 최소 주차면수 기준 재적재 (기존 데이터 전량 교체)
+ *
+ * 실시간 API와 상세 API는 prk_center_id 체계가 서로 달라 대부분 매칭되지 않습니다.
+ * 그래서 양쪽 모두에 존재하는 ID(교집합)만 골라 적재합니다.
+ * 이렇게 하면 이름·주소·좌표(상세 API)와 실시간 점유 현황(실시간 API)이 모두 정확히 붙습니다.
+ *
+ * @param minSpaces 최소 총 주차면수 (이상). 기본 50
+ * @param limit     최대 적재 건수. 0이면 조건에 맞는 전량
+ */
+export async function reloadParking(minSpaces = 50, limit = 0) {
+  const [realtimeList, sttusList] = await Promise.all([
+    fetchRealtime(REALTIME_LOOKUP_ROWS),
+    fetchSttusInfo(STTUS_LOOKUP_ROWS),
+  ])
+
+  if (!realtimeList.length || !sttusList.length) {
+    throw new Error(`외부 API 응답 없음 (realtime=${realtimeList.length}, sttus=${sttusList.length})`)
+  }
+
+  const sttusMap = new Map<string, any>(
+    sttusList.map((s: any) => [s.prk_center_id, s] as [string, any])
+  )
+
+  const seen = new Set<string>()
+  const rows: any[] = []
+
+  for (const r of realtimeList) {
+    const id = r.prk_center_id
+    if (!id || seen.has(id)) continue
+    if (Number(r.pkfc_ParkingLots_total ?? 0) < minSpaces) continue
+
+    const s = sttusMap.get(id)
+    if (!s) continue // 상세 정보가 없으면 제외 (교집합만 적재)
+
+    seen.add(id)
+    rows.push({
+      prk_center_id: id,
+      name: s.prk_plce_nm ?? null,
+      sido: s.prk_plce_adres_sido ?? null,
+      sigungu: s.prk_plce_adres_sigungu ?? null,
+      address: s.prk_plce_adres ?? null,
+      latitude: s.prk_plce_entrc_la ? Number(s.prk_plce_entrc_la) : null,
+      longitude: s.prk_plce_entrc_lo ? Number(s.prk_plce_entrc_lo) : null,
+    })
+
+    if (limit > 0 && rows.length >= limit) break
+  }
+
+  if (rows.length === 0) {
+    return {
+      success: false,
+      message: `조건에 맞는 주차장이 없습니다 (min_spaces=${minSpaces})`,
+      min_spaces: minSpaces,
+      inserted: 0,
+    }
+  }
+
+  // 기존 데이터 전량 삭제 후 교체
+  const { error: deleteError } = await supabase
+    .from("parking_lot")
+    .delete()
+    .neq("prk_center_id", "__none__")
+  if (deleteError) throw deleteError
+
+  const { error: insertError } = await supabase.from("parking_lot").insert(rows)
+  if (insertError) throw insertError
+
+  return {
+    success: true,
+    min_spaces: minSpaces,
+    scanned: { realtime: realtimeList.length, sttus: sttusList.length },
+    inserted: rows.length,
+    sample: rows.slice(0, 5),
+  }
+}
+
+/**
  * 3️⃣ 전체 주차장 조회
  */
 export async function getAllParking() {
   const { data: parking, error } = await supabase.from("parking_lot").select("*")
   if (error) throw error
 
-  const realtimeList = await fetchRealtime()
+  const realtimeList = await fetchRealtime(REALTIME_LOOKUP_ROWS)
   const realtimeMap = new Map(realtimeList.map((r: any) => [r.prk_center_id, r]))
 
   return parking.map((p: any) => {
@@ -152,7 +237,7 @@ export async function getParkingById(id: string) {
   if (error || !dbData) return null
 
   // 2. 실시간 정보 가져오기
-  const realtimeList = await fetchRealtime()
+  const realtimeList = await fetchRealtime(REALTIME_LOOKUP_ROWS)
 
   // 3. 해당 ID의 실시간 데이터 딱 하나만 찾기
   const realtimeData = realtimeList.find((r: any) => r.prk_center_id === id)
