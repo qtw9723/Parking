@@ -6,6 +6,21 @@ import {
   reloadParking,
 } from "./data.ts"
 
+// 데이터를 바꾸는 요청(POST)은 서비스 롤 키를 Bearer 토큰으로 보낸 경우에만 허용한다.
+// anon 키처럼 공개된 JWT는 플랫폼 JWT 검증은 통과하지만 여기서 거부된다.
+function isAdminRequest(req: Request): boolean {
+  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+  if (!key) return false
+  const expected = `Bearer ${key}`
+  const given = req.headers.get("Authorization") ?? ""
+  if (given.length !== expected.length) return false
+  let diff = 0
+  for (let i = 0; i < expected.length; i++) {
+    diff |= given.charCodeAt(i) ^ expected.charCodeAt(i)
+  }
+  return diff === 0
+}
+
 Deno.serve(async (req) => {
   try {
     const url = new URL(req.url)
@@ -14,6 +29,13 @@ Deno.serve(async (req) => {
     const method = req.method
 
     console.log(`Method: ${method}, Path: ${pathname}`); // 로그로 경로 확인용
+
+    if (method === "POST" && !isAdminRequest(req)) {
+      return new Response(JSON.stringify({ error: "unauthorized" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" }
+      })
+    }
 
     // 🆕 최소 주차면수 기준 재적재 (기존 데이터 전량 교체)
     //    예: POST /reload?min=50  ,  POST /reload?min=50&limit=100
